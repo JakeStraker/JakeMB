@@ -204,7 +204,7 @@ public class MainActivity extends Activity {
         else
         {
             // Login using the Google provider.
-            ListenableFuture<MobileServiceUser> mLogin = mClient.login(MobileServiceAuthenticationProvider.Facebook);
+            final ListenableFuture<MobileServiceUser> mLogin = mClient.login(MobileServiceAuthenticationProvider.Facebook);
 
             Futures.addCallback(mLogin, new FutureCallback<MobileServiceUser>() {
                 @Override
