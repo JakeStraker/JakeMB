@@ -58,27 +58,14 @@ public class MainActivity extends Activity {
     }
 
     public static final String SHAREDPREFFILE = "temp";
-
     public static final String USERIDPREF = "uid";
-
     public static final String TOKENPREF = "tkn";
-
     public static String accessToken;
-
     public static String authToken;
-
     public static String currentToken = "";
-
-    // Create an object to connect to your mobile app service
     private MobileServiceClient mClient;
-
-    // Create an object for  a table on your mobile app service
     private MobileServiceTable<ToDoItem> mToDoTable;
-
-    // global variable to update a TextView control text
     TextView display;
-
-    // simple stringbulder to store textual data retrieved from mobile app service table
     StringBuilder sb = new StringBuilder();
 
     @Override
