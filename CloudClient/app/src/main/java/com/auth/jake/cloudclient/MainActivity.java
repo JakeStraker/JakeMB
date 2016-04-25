@@ -19,7 +19,6 @@ import android.widget.ListView;
 import android.widget.TextView;
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -37,7 +36,7 @@ import com.microsoft.windowsazure.mobileservices.authentication.MobileServiceAut
 import com.microsoft.windowsazure.mobileservices.authentication.MobileServiceUser;
 import com.microsoft.windowsazure.mobileservices.*;
 import com.microsoft.windowsazure.mobileservices.table.MobileServiceTable;
-import org.json.JSONArray;
+
 import org.json.JSONObject;
 import java.net.MalformedURLException;
 import java.util.List;
@@ -67,8 +66,6 @@ public class MainActivity extends Activity {
     public static String accessToken;
 
     public static String authToken;
-
-    private String accessResult;
 
     public static String currentToken = "";
 
@@ -108,8 +105,6 @@ public class MainActivity extends Activity {
         //check internet connection
         if (isConnectedToInternet()) {
             authenticate();
-            createTable();
-
         } else {
             //otherwise, display a dialog box that can direct the user to the settings page or ignore the warning
             final AlertDialog alertDialog = new AlertDialog.Builder(this).create();
@@ -135,7 +130,7 @@ public class MainActivity extends Activity {
         Editor editor = prefs.edit();
         editor.putString(USERIDPREF, user.getUserId());
         editor.putString(TOKENPREF, user.getAuthenticationToken());
-        editor.apply();
+        editor.commit();
     }
 
     private boolean loadUserTokenCache(MobileServiceClient client) {
@@ -146,22 +141,16 @@ public class MainActivity extends Activity {
         String token = prefs.getString(TOKENPREF, "undefined");
         if (token == "undefined")
             return false;
-
         MobileServiceUser user = new MobileServiceUser(userId);
         user.setAuthenticationToken(token);
+        authToken = user.getAuthenticationToken();
         client.setCurrentUser(user);
-        saveData(user.getAuthenticationToken().toString());
-
         return true;
     }
 
     private void createTable() {
-
-        // display = (TextView) findViewById(R.id.displayData);
-
-        // using the MobileServiceTable object created earlier, create a reference to YOUR table
         mToDoTable = mClient.getTable(ToDoItem.class);
-
+        new AsyncTaskParseJson().execute();
     }
 
     private void authenticate() {
@@ -173,7 +162,6 @@ public class MainActivity extends Activity {
         else {
             // Login using the FB provider.
             ListenableFuture<MobileServiceUser> mLogin = mClient.login(MobileServiceAuthenticationProvider.Facebook);
-
             Futures.addCallback(mLogin, new FutureCallback<MobileServiceUser>() {
                 @Override
                 public void onFailure(Throwable exc) {
@@ -188,8 +176,6 @@ public class MainActivity extends Activity {
                     cacheUserToken(mClient.getCurrentUser());
                     authToken = user.getAuthenticationToken();
                     createTable();
-                    new AsyncTaskParseJson().execute();
-                    saveData(user.getAuthenticationToken().toString());
                 }
             });
         }
@@ -348,12 +334,13 @@ public class MainActivity extends Activity {
         protected String doInBackground(String... arg0) {
 
             try {
+                String accessResult;
                 getAzure jParser = new getAzure();
-                accessResult = jParser.getJSONFromUrl(MainActivity.this, API, authToken);
+                accessResult = jParser.getTokenFromAzure(MainActivity.this, API, authToken);
                 accessToken = accessResult;
             } catch (Exception e) {
                 e.printStackTrace();
-                Log.e("ERRORR", e.toString());
+                Log.e("ERROR", e.toString());
             }
             return null;
         }
@@ -413,7 +400,7 @@ public class MainActivity extends Activity {
         final String TAG = "JsonParser.java";
         String json = "";
 
-        public String getJSONFromUrl(Context context, String url, String Auth_Token){
+        public String getTokenFromAzure(Context context, String url, String Auth_Token){
             try{
                 URL u = new URL(url);
 
