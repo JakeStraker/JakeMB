@@ -63,6 +63,8 @@ public class MainActivity extends Activity {
     public static String accessToken;
     public static String authToken;
     public static String currentToken = "";
+    public static Boolean hasAuthenticated = false;
+    public static Boolean pressed = false;
     private MobileServiceClient mClient;
     private MobileServiceTable<ToDoItem> mToDoTable;
     TextView display;
@@ -70,7 +72,6 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
         super.onCreate(savedInstanceState);
         FacebookSdk.sdkInitialize(this.getApplicationContext());
 
@@ -111,15 +112,25 @@ public class MainActivity extends Activity {
             alertDialog.show();
         }
     }
-
+    public void onMoreInfo(View view) {
+        if (!hasAuthenticated) {
+            createAndShowDialog("You are not authenticated yet, Please Wait to recover the authentication token", "Error!");
+        } else {
+            if (pressed) {
+                createAndShowDialog("This Information is being recovered, Please Wait", "Error!");
+            } else {
+                pressed = true;
+                new getFBWithToken().execute();
+            }
+        }
+    }
     private void cacheUserToken(MobileServiceUser user) {
         SharedPreferences prefs = getSharedPreferences(SHAREDPREFFILE, Context.MODE_PRIVATE);
         Editor editor = prefs.edit();
         editor.putString(USERIDPREF, user.getUserId());
         editor.putString(TOKENPREF, user.getAuthenticationToken());
-        editor.commit();
+        editor.apply();
     }
-
     private boolean loadUserTokenCache(MobileServiceClient client) {
         SharedPreferences prefs = getSharedPreferences(SHAREDPREFFILE, Context.MODE_PRIVATE);
         String userId = prefs.getString(USERIDPREF, "undefined");
@@ -137,12 +148,13 @@ public class MainActivity extends Activity {
 
     private void createTable() {
         mToDoTable = mClient.getTable(ToDoItem.class);
-        new AsyncTaskParseJson().execute();
+        new getAuthToken().execute();
     }
 
     private void authenticate() {
         // We first try to load a token cache if one exists.
         if (loadUserTokenCache(mClient)) {
+            createAndShowDialog("Your Cached Authentication Token has been used to authorise you","Success!");
             createTable();
         }
         // If we failed to load a token cache, login and create a token cache
@@ -152,14 +164,12 @@ public class MainActivity extends Activity {
             Futures.addCallback(mLogin, new FutureCallback<MobileServiceUser>() {
                 @Override
                 public void onFailure(Throwable exc) {
-                    createAndShowDialog("You must log in. Login Required", "Error");
+                    createAndShowDialog("You Failed To Authenticate, Please Restart and Login", "Error");
                 }
 
                 @Override
                 public void onSuccess(MobileServiceUser user) {
-                    createAndShowDialog(String.format(
-                            "Authentication Token Stored - %1$2s",
-                            user.getUserId() + user.getAuthenticationToken()), "Success!");
+                    createAndShowDialog("Your Auth Token has been successfully cached","Success!");
                     cacheUserToken(mClient.getCurrentUser());
                     authToken = user.getAuthenticationToken();
                     createTable();
@@ -200,7 +210,6 @@ public class MainActivity extends Activity {
 
     private void createAndShowDialog(String message, String title) {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-
         builder.setMessage(message);
         builder.setTitle(title);
         builder.create().show();
@@ -302,7 +311,7 @@ public class MainActivity extends Activity {
         private static final String TAG = "MyActivity";
     }
 
-    public class AsyncTaskParseJson extends AsyncTask<String, String, String> {
+    public class getAuthToken extends AsyncTask<String, String, String> {
 
         ArrayList<String> items = new ArrayList<String>();
 
@@ -334,17 +343,20 @@ public class MainActivity extends Activity {
 
         //List View is created and parsed JSON data form web service is appended to a new item of the list
         @Override
-        protected void onPostExecute(String strFromDoInBg) {
-            new AsyncTaskParseJson2().execute();
+        protected void onPostExecute(String strFromDoInBg)
+        {
+            hasAuthenticated = true;
+            TextView t = (TextView) findViewById(R.id.textView);
+            String authmsg = "Status: Authenticated";
+            t.setText(authmsg);
         }
     }
 
-    public class AsyncTaskParseJson2 extends AsyncTask<String, String, String> {
+    public class getFBWithToken extends AsyncTask<String, String, String> {
 
-        private final String FB_API = ("https://graph.facebook.com/me?fields=name,gender,email&access_token=" + accessToken);
-        String yourServiceUrl = (FB_API);
+        private final String FB_API = ("https://graph.facebook.com/me?fields=name,gender,picture&access_token=" + accessToken);
         JSONObject FBJSON = new JSONObject();
-
+        String yourServiceUrl = (FB_API);
         @Override
         protected void onPreExecute() {
         }
@@ -352,10 +364,8 @@ public class MainActivity extends Activity {
         @Override
         // this method is used for...................
         protected String doInBackground(String... arg0) {
-
             try {
                 getFacebook jParser = new getFacebook();
-
                 FBJSON = jParser.getJSONFromUrl(MainActivity.this, yourServiceUrl, authToken);
             } catch (Exception e) {
                 e.printStackTrace();
@@ -368,13 +378,15 @@ public class MainActivity extends Activity {
         @Override
         protected void onPostExecute(String strFromDoInBg) {
             try {
-                String[] results = new String[2];
+                String[] results = new String[3];
                 results[0] = FBJSON.getString("name");
                 results[1] = FBJSON.getString("gender");
+                results[2] = FBJSON.getString("picture");
                 ArrayList<String> items = new ArrayList<String>(Arrays.asList(results));
                 ListView list = (ListView) findViewById(R.id.dataView);
                 ArrayAdapter<String> facebookAdapter = new ArrayAdapter<String>(MainActivity.this, android.R.layout.simple_expandable_list_item_1, items);
                 list.setAdapter(facebookAdapter);
+                pressed = false;
             }catch (Exception e)
             {
 
@@ -443,8 +455,8 @@ public class MainActivity extends Activity {
             return json = "";
         }
     }
-
-    public class getFacebook {
+    public class getFacebook
+    {
         final String TAG = "JsonParser.java";
         String json = "";
         JSONObject dataFb = new JSONObject();
