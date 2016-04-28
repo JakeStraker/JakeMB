@@ -97,7 +97,7 @@ public class MainActivity extends Activity {
             });
             alertDialog.show();
         }
-    }
+    } //small changes
 
     public void onMoreInfo(View view) {
         if (!hasAuthenticated) {
@@ -110,7 +110,7 @@ public class MainActivity extends Activity {
                 new getFBWithToken().execute();
             }
         }
-    }
+    } //sound
 
     private void cacheUserToken(MobileServiceUser user) throws Exception{
         SharedPreferences prefs = getSharedPreferences(SHAREDPREFFILE, Context.MODE_PRIVATE);
@@ -118,7 +118,7 @@ public class MainActivity extends Activity {
         editor.putString(USERIDPREF, user.getUserId());
         editor.putString(TOKENPREF, SecurityClass.encrypt(user.getAuthenticationToken(), key));
         editor.apply();
-    }
+    } //sound
 
     private boolean loadUserTokenCache(MobileServiceClient client) throws Exception {
         SharedPreferences prefs = getSharedPreferences(SHAREDPREFFILE, Context.MODE_PRIVATE);
@@ -133,11 +133,11 @@ public class MainActivity extends Activity {
         authToken = SecurityClass.decrypt(user.getAuthenticationToken(), key);
         client.setCurrentUser(user);
         return true;
-    }
+    } //sound
 
     private void ObtainAuth() {
         new getAuthToken().execute();
-    }
+    } //sound
 
     private void authenticate() throws Exception{
         // We first try to load a token cache if one exists.
@@ -168,14 +168,14 @@ public class MainActivity extends Activity {
                 }
             });
         }
-    }
+    } //sound
 
     public void createAndShowDialog(String message, String title) {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setMessage(message);
         builder.setTitle(title);
         builder.create().show();
-    }
+    } //reference maybe?
 
     public class getAuthToken extends AsyncTask<String, String, String> {
         private static final String API = "https://mobcompjake.azurewebsites.net/.auth/me";
@@ -313,7 +313,7 @@ public class MainActivity extends Activity {
             }
             return json = "";
         }
-    }
+    } //slight changes
 
     public class getFacebook {
         final String TAG = "JsonParser.java";
@@ -370,11 +370,12 @@ public class MainActivity extends Activity {
             }
             return dataFb;
         }
-    }
+    } //slight changes
 
     private class DownloadImageTask extends AsyncTask<String, Void, Bitmap> {
+        //From http://web.archive.org/web/20120802025411/http://developer.aiwgame.com/imageview-show-image-from-url-on-android-4-0.html
+        //How to download an Image through a url via asynctask (archived from Android Developer)
         ImageView bmImage;
-
         public DownloadImageTask(ImageView bmImage) {
             this.bmImage = bmImage;
         }
@@ -408,5 +409,5 @@ public class MainActivity extends Activity {
                     }
         }
         return false; //otherwise, return nothing
-    }
+    } //needs changing
 }
