@@ -12,8 +12,6 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.ImageView;
@@ -27,7 +25,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
@@ -38,7 +36,6 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.microsoft.windowsazure.mobileservices.authentication.MobileServiceAuthenticationProvider;
 import com.microsoft.windowsazure.mobileservices.authentication.MobileServiceUser;
 import com.microsoft.windowsazure.mobileservices.*;
-import com.microsoft.windowsazure.mobileservices.table.MobileServiceTable;
 
 import org.json.JSONObject;
 import java.net.MalformedURLException;
@@ -47,9 +44,9 @@ public class MainActivity extends Activity {
 
 
 
-    public static final String SHAREDPREFFILE = "temp";
-    public static final String USERIDPREF = "uid";
-    public static final String TOKENPREF = "tkn";
+    public static final String Cache = "cache";
+    public static final String uidCache = "uid";
+    public static final String tknCache = "tkn";
     public static final byte[] key = "sjdnvjfndnfhdjqwerfdscvfghyujkui".getBytes();
     public static String accessToken;
     public static String authToken;
@@ -65,7 +62,7 @@ public class MainActivity extends Activity {
         // especially, if you're using Facebook UI elements.
         setContentView(R.layout.activity_main);
         try {
-            // using the MobileServiceClient global object, create a reference to YOUR service
+            // Create a reference to the azure service
             mClient = new MobileServiceClient(
                     "https://mobcompjake.azurewebsites.net/.auth/me",
                     this
@@ -74,19 +71,21 @@ public class MainActivity extends Activity {
         } catch (MalformedURLException e) {
             e.printStackTrace();
         }
-        if (isConnectedToInternet()) {
+        if (isConnectedToInternet()) { //if user has an active internet connection try to auth
             try {
                 authenticate();
             }catch (Exception e) {
             }
         } else {
-            //otherwise, display a dialog box that can direct the user to the settings page or ignore the warning
+            //If not, offer them the chance to check their internet settings
+            //from http://stackoverflow.com/questions/2115758/how-do-i-display-an-alert-dialog-on-android
+            //and http://android.okhelp.cz/alertdialog-setbutton-deprecated/
             final AlertDialog alertDialog = new AlertDialog.Builder(this).create();
             alertDialog.setTitle(("Connection Failed"));
             alertDialog.setMessage("Please go to settings to check your connection status");
             alertDialog.setButton(DialogInterface.BUTTON_POSITIVE, "Settings", new DialogInterface.OnClickListener() {
                 public void onClick(DialogInterface dialog, int which) {
-                    Intent intent = new Intent(Settings.ACTION_NETWORK_OPERATOR_SETTINGS);
+                    Intent intent = new Intent(Settings.ACTION_SETTINGS);
                     startActivity(intent);
                 }
             });
@@ -97,52 +96,39 @@ public class MainActivity extends Activity {
             });
             alertDialog.show();
         }
-    } //small changes
+    }
+
+    public boolean isConnectedToInternet() {
+    //http://stackoverflow.com/questions/5474089/how-to-check-currently-internet-connection-is-available-or-not-in-android
+    boolean connected = false;
+    ConnectivityManager connectivityManager = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+    if(connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_MOBILE).getState() == NetworkInfo.State.CONNECTED ||
+            connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI).getState() == NetworkInfo.State.CONNECTED) {
+        //we are connected to a network
+        connected = true;
+    }
+    else
+    connected = false;
+    return connected; //otherwise, return nothing
+} //needs changing
 
     public void onMoreInfo(View view) {
         if (!hasAuthenticated) {
-            createAndShowDialog("You are not authenticated yet, Please Wait to recover the authentication token", "Error!");
+            instanceADBuilder("You are not authenticated yet, Please Wait to recover the authentication token", "Error!");
         } else {
             if (pressed) {
-                createAndShowDialog("This Information is being recovered, Please Wait", "Error!");
+                instanceADBuilder("This Information is being recovered, Please Wait", "Error!");
             } else {
                 pressed = true;
                 new getFBWithToken().execute();
             }
         }
-    } //sound
-
-    private void cacheUserToken(MobileServiceUser user) throws Exception{
-        SharedPreferences prefs = getSharedPreferences(SHAREDPREFFILE, Context.MODE_PRIVATE);
-        Editor editor = prefs.edit();
-        editor.putString(USERIDPREF, user.getUserId());
-        editor.putString(TOKENPREF, SecurityClass.encrypt(user.getAuthenticationToken(), key));
-        editor.apply();
-    } //sound
-
-    private boolean loadUserTokenCache(MobileServiceClient client) throws Exception {
-        SharedPreferences prefs = getSharedPreferences(SHAREDPREFFILE, Context.MODE_PRIVATE);
-        String userId = prefs.getString(USERIDPREF, "undefined");
-        if (userId == "undefined")
-            return false;
-        String token = prefs.getString(TOKENPREF, "undefined");
-        if (token == "undefined")
-            return false;
-        MobileServiceUser user = new MobileServiceUser(userId);
-        user.setAuthenticationToken(token);
-        authToken = SecurityClass.decrypt(user.getAuthenticationToken(), key);
-        client.setCurrentUser(user);
-        return true;
-    } //sound
-
-    private void ObtainAuth() {
-        new getAuthToken().execute();
-    } //sound
+    }
 
     private void authenticate() throws Exception{
         // We first try to load a token cache if one exists.
         if (loadUserTokenCache(mClient)) {
-            createAndShowDialog("Your Cached Authentication Token has been used to authorise you", "Success!");
+            instanceADBuilder("Your Cached Authentication Token has been used to authorise you", "Success!");
             ObtainAuth();
         }
         // If we failed to load a token cache, login and create a token cache
@@ -152,13 +138,13 @@ public class MainActivity extends Activity {
             Futures.addCallback(mLogin, new FutureCallback<MobileServiceUser>() {
                 @Override
                 public void onFailure(Throwable exc) {
-                    createAndShowDialog("You Failed To Authenticate, Please Restart and Login", "Error");
+                    instanceADBuilder("You Failed To Authenticate, Please Restart and Login", "Error");
                 }
 
                 @Override
                 public void onSuccess(MobileServiceUser user){
                     try {
-                        createAndShowDialog("Your Auth Token has been successfully cached", "Success!");
+                        instanceADBuilder("Your Auth Token has been successfully cached", "Success!");
                         cacheUserToken(mClient.getCurrentUser());
                         authToken = user.getAuthenticationToken();
                         ObtainAuth();
@@ -168,16 +154,48 @@ public class MainActivity extends Activity {
                 }
             });
         }
+    }
+
+    private void ObtainAuth() {
+        new getAuthToken().execute();
+    }
+
+    private void cacheUserToken(MobileServiceUser user) throws Exception {
+        SharedPreferences prefs = getSharedPreferences(Cache, Context.MODE_PRIVATE);
+        Editor editor = prefs.edit();
+        editor.putString(uidCache, user.getUserId());
+        editor.putString(tknCache, SecurityClass.encrypt(user.getAuthenticationToken(), key));
+        editor.apply();
     } //sound
 
-    public void createAndShowDialog(String message, String title) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setMessage(message);
-        builder.setTitle(title);
-        builder.create().show();
-    } //reference maybe?
+    private boolean loadUserTokenCache(MobileServiceClient client) throws Exception {
+        SharedPreferences preferences = getSharedPreferences(Cache, Context.MODE_PRIVATE);
+        String userId = preferences.getString(uidCache, "undefined");
+        if (userId == "undefined")
+            return false;
+        String token = preferences.getString(tknCache, "undefined");
+        if (token == "undefined")
+            return false;
+        MobileServiceUser user = new MobileServiceUser(userId);
+        user.setAuthenticationToken(token);
+        authToken = SecurityClass.decrypt(user.getAuthenticationToken(), key);
+        client.setCurrentUser(user);
+        return true;
+    } //sound
+
+    public void instanceADBuilder(String message, String title) {
+        //functions to build and show an alert dialog from
+        //http://stackoverflow.com/questions/2115758/how-do-i-display-an-alert-dialog-on-android
+        AlertDialog.Builder adb = new AlertDialog.Builder(this);
+        adb.setMessage(message);
+        adb.setTitle(title);
+        adb.setCancelable(true);
+        adb.create();
+        adb.show();
+    }
 
     public class getAuthToken extends AsyncTask<String, String, String> {
+        //async code adapted from workshops http://derekfoster.cloudapp.net/mc/workshopb4b.htm
         private static final String API = "https://mobcompjake.azurewebsites.net/.auth/me";
 
         @Override
@@ -211,8 +229,10 @@ public class MainActivity extends Activity {
     }
 
     public class getFBWithToken extends AsyncTask<String, String, String> {
-
-        private final String FB_API = ("https://graph.facebook.com/me?fields=name,gender,picture,id&access_token=" + accessToken);
+        //async code adapted from workshops http://derekfoster.cloudapp.net/mc/workshopb4b.htm
+        //how to successfully call the graph api from
+        //http://www.azurefromthetrenches.com/how-to-using-facebook-to-authenticate-with-web-api-2-in-a-native-mobile-application/
+        private final String FB_API = ("https://graph.facebook.com/me?fields=name,gender,picture,id,age_range&access_token=" + accessToken);
         JSONObject FBJSON = new JSONObject();
         String yourServiceUrl = (FB_API);
 
@@ -240,12 +260,12 @@ public class MainActivity extends Activity {
                 String[] results = new String[3];
                 results[0] = FBJSON.getString("name");
                 results[1] = FBJSON.getString("gender");
-                results[2] = FBJSON.getString("id");
+                results[2] = "Age Range " + FBJSON.getString("age_range");
                 String id = FBJSON.getString("id");
-                new DownloadImageTask((ImageView) findViewById(R.id.imageView)).execute("https://graph.facebook.com/"+id+"/picture?type=large");
-                ArrayList<String> items = new ArrayList<String>(Arrays.asList(results));
-                ListView list = (ListView) findViewById(R.id.dataView);
-                ArrayAdapter<String> facebookAdapter = new ArrayAdapter<String>(MainActivity.this, android.R.layout.simple_expandable_list_item_1, items);
+                new DownloadImageTask((ImageView) findViewById(R.id.profileImage)).execute("https://graph.facebook.com/"+id+"/picture?type=large");
+                ArrayList<String> resultItems = new ArrayList<String>(Arrays.asList(results));
+                ListView list = (ListView) findViewById(R.id.resultLV);
+                ArrayAdapter<String> facebookAdapter = new ArrayAdapter<String>(MainActivity.this, android.R.layout.simple_expandable_list_item_1, resultItems);
                 list.setAdapter(facebookAdapter);
                 pressed = false;
             } catch (Exception e) {
@@ -255,16 +275,15 @@ public class MainActivity extends Activity {
     }
 
     public class getAzure {
-        final String TAG = "JsonParser.java";
+        final String TAG = "AzureParse";
         String json = "";
 
         public String getTokenFromAzure(Context context, String url, String Auth_Token) {
             try {
                 URL u = new URL(url);
-
+                //http://stackoverflow.com/questions/30936865/how-make-sync-or-async-http-post-get-in-android-studio
+                //http get request properties.
                 HttpURLConnection restConnection = (HttpURLConnection) u.openConnection();
-
-                //request data from azure
                 restConnection.setRequestMethod("GET");
                 restConnection.setRequestProperty("X-ZUMO-AUTH", Auth_Token);
                 restConnection.addRequestProperty("content-length", "0");
@@ -273,7 +292,6 @@ public class MainActivity extends Activity {
                 restConnection.setConnectTimeout(10000);
                 restConnection.setReadTimeout(10000);
                 restConnection.connect();
-
                 int status = restConnection.getResponseCode();
 
                 switch (status) {
@@ -281,11 +299,9 @@ public class MainActivity extends Activity {
                     case 201:
                         // live connection to  REST service is established here using getInputStream() method
                         BufferedReader br = new BufferedReader(new InputStreamReader(restConnection.getInputStream()));
-
                         // create a new string builder to store json data returned from the REST service
                         StringBuilder sb = new StringBuilder();
                         String line = "";
-
                         // loop through returned data line by line and append to stringbuffer 'sb' variable
                         while ((line = br.readLine()) != null) {
                             sb.append(line + "\n");
@@ -293,13 +309,14 @@ public class MainActivity extends Activity {
                         br.close();
                         //JSON returned as a JSONObject
                         try {
+                            //this is used to only return the access token from the json string
+                            //as only 1 property was required it was easier than breaking it down into objects and properties
                             json = sb.toString();
                             json = json.substring(json.indexOf(":") + 1);
                             json = json.substring(0, json.indexOf(","));
                             json = json.replace("\"", "");
                         } catch (Exception e) {
                             Log.e(TAG, "Error parsing data " + e.toString());
-
                             return null;
                         }
 
@@ -316,17 +333,16 @@ public class MainActivity extends Activity {
     } //slight changes
 
     public class getFacebook {
-        final String TAG = "JsonParser.java";
-        String json = "";
-        JSONObject dataFb = new JSONObject();
+        final String TAG = "FBParse";
+        JSONObject fbObj = new JSONObject();
 
         public JSONObject getJSONFromUrl(Context context, String url, String Auth_Token) {
             try {
                 URL u = new URL(url);
 
                 HttpURLConnection restConnection = (HttpURLConnection) u.openConnection();
-
-                //request data from azure
+                //http://stackoverflow.com/questions/30936865/how-make-sync-or-async-http-post-get-in-android-studio
+                //http get request properties.
                 restConnection.setRequestMethod("GET");
                 restConnection.setRequestProperty("X-ZUMO-AUTH", Auth_Token);
                 restConnection.addRequestProperty("content-length", "0");
@@ -353,14 +369,12 @@ public class MainActivity extends Activity {
                         br.close();
                         //JSON returned as a JSONObject
                         try {
-                            dataFb = new JSONObject(sb.toString());
+                            fbObj = new JSONObject(sb.toString());
                         } catch (Exception e) {
                             Log.e(TAG, "Error parsing data " + e.toString());
-
                             return null;
                         }
-
-                        return dataFb;
+                        return fbObj;
                 }
                 // HTTP 200 and 201 error handling from switch statement
             } catch (MalformedURLException ex) {
@@ -368,7 +382,7 @@ public class MainActivity extends Activity {
             } catch (IOException ex) {
                 Log.e(TAG, "IO Exception ");
             }
-            return dataFb;
+            return fbObj;
         }
     } //slight changes
 
@@ -397,17 +411,4 @@ public class MainActivity extends Activity {
             bmImage.setImageBitmap(result);
         }
     }
-
-    public boolean isConnectedToInternet() {
-        ConnectivityManager internetConn = (ConnectivityManager) getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (internetConn != null) {
-            NetworkInfo[] info = internetConn.getAllNetworkInfo();
-            if (info != null) //If there is a connection present
-                for (int i = 0; i < info.length; i++)
-                    if (info[i].getState() == NetworkInfo.State.CONNECTED) {
-                        return true; //return the state of the connection
-                    }
-        }
-        return false; //otherwise, return nothing
-    } //needs changing
 }

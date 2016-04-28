@@ -6,7 +6,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 /**
  * Created by JakeS on 07/12/2015.
- * This code was adapted from the code used in assignment Item 1
+ * This code was adapted from the code used in Mobile Computing - Assignment Item 1
  */
 public class SecurityClass {
 
