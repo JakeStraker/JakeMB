@@ -4,21 +4,24 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.ArrayAdapter;
+import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -39,48 +42,29 @@ import com.microsoft.windowsazure.mobileservices.table.MobileServiceTable;
 
 import org.json.JSONObject;
 import java.net.MalformedURLException;
-import java.util.List;
 
 public class MainActivity extends Activity {
 
-    //Check to see if the device is connected to the internet
-    public boolean isConnectedToInternet() {
-        ConnectivityManager internetConn = (ConnectivityManager) getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (internetConn != null) {
-            NetworkInfo[] info = internetConn.getAllNetworkInfo();
-            if (info != null) //If there is a connection present
-                for (int i = 0; i < info.length; i++)
-                    if (info[i].getState() == NetworkInfo.State.CONNECTED) {
-                        return true; //return the state of the connection
-                    }
-        }
-        return false; //otherwise, return nothing
-    }
+
 
     public static final String SHAREDPREFFILE = "temp";
     public static final String USERIDPREF = "uid";
     public static final String TOKENPREF = "tkn";
+    public static final byte[] key = "sjdnvjfndnfhdjqwerfdscvfghyujkui".getBytes();
     public static String accessToken;
     public static String authToken;
-    public static String currentToken = "";
     public static Boolean hasAuthenticated = false;
     public static Boolean pressed = false;
     private MobileServiceClient mClient;
-    private MobileServiceTable<ToDoItem> mToDoTable;
-    TextView display;
-    StringBuilder sb = new StringBuilder();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         FacebookSdk.sdkInitialize(this.getApplicationContext());
-
         // Initialize the SDK before executing any other operations,
         // especially, if you're using Facebook UI elements.
         setContentView(R.layout.activity_main);
-
         try {
-
             // using the MobileServiceClient global object, create a reference to YOUR service
             mClient = new MobileServiceClient(
                     "https://mobcompjake.azurewebsites.net/.auth/me",
@@ -90,9 +74,11 @@ public class MainActivity extends Activity {
         } catch (MalformedURLException e) {
             e.printStackTrace();
         }
-        //check internet connection
         if (isConnectedToInternet()) {
-            authenticate();
+            try {
+                authenticate();
+            }catch (Exception e) {
+            }
         } else {
             //otherwise, display a dialog box that can direct the user to the settings page or ignore the warning
             final AlertDialog alertDialog = new AlertDialog.Builder(this).create();
@@ -112,6 +98,7 @@ public class MainActivity extends Activity {
             alertDialog.show();
         }
     }
+
     public void onMoreInfo(View view) {
         if (!hasAuthenticated) {
             createAndShowDialog("You are not authenticated yet, Please Wait to recover the authentication token", "Error!");
@@ -124,14 +111,16 @@ public class MainActivity extends Activity {
             }
         }
     }
-    private void cacheUserToken(MobileServiceUser user) {
+
+    private void cacheUserToken(MobileServiceUser user) throws Exception{
         SharedPreferences prefs = getSharedPreferences(SHAREDPREFFILE, Context.MODE_PRIVATE);
         Editor editor = prefs.edit();
         editor.putString(USERIDPREF, user.getUserId());
-        editor.putString(TOKENPREF, user.getAuthenticationToken());
+        editor.putString(TOKENPREF, SecurityClass.encrypt(user.getAuthenticationToken(), key));
         editor.apply();
     }
-    private boolean loadUserTokenCache(MobileServiceClient client) {
+
+    private boolean loadUserTokenCache(MobileServiceClient client) throws Exception {
         SharedPreferences prefs = getSharedPreferences(SHAREDPREFFILE, Context.MODE_PRIVATE);
         String userId = prefs.getString(USERIDPREF, "undefined");
         if (userId == "undefined")
@@ -141,21 +130,20 @@ public class MainActivity extends Activity {
             return false;
         MobileServiceUser user = new MobileServiceUser(userId);
         user.setAuthenticationToken(token);
-        authToken = user.getAuthenticationToken();
+        authToken = SecurityClass.decrypt(user.getAuthenticationToken(), key);
         client.setCurrentUser(user);
         return true;
     }
 
-    private void createTable() {
-        mToDoTable = mClient.getTable(ToDoItem.class);
+    private void ObtainAuth() {
         new getAuthToken().execute();
     }
 
-    private void authenticate() {
+    private void authenticate() throws Exception{
         // We first try to load a token cache if one exists.
         if (loadUserTokenCache(mClient)) {
-            createAndShowDialog("Your Cached Authentication Token has been used to authorise you","Success!");
-            createTable();
+            createAndShowDialog("Your Cached Authentication Token has been used to authorise you", "Success!");
+            ObtainAuth();
         }
         // If we failed to load a token cache, login and create a token cache
         else {
@@ -168,158 +156,29 @@ public class MainActivity extends Activity {
                 }
 
                 @Override
-                public void onSuccess(MobileServiceUser user) {
-                    createAndShowDialog("Your Auth Token has been successfully cached","Success!");
-                    cacheUserToken(mClient.getCurrentUser());
-                    authToken = user.getAuthenticationToken();
-                    createTable();
+                public void onSuccess(MobileServiceUser user){
+                    try {
+                        createAndShowDialog("Your Auth Token has been successfully cached", "Success!");
+                        cacheUserToken(mClient.getCurrentUser());
+                        authToken = user.getAuthenticationToken();
+                        ObtainAuth();
+                    }catch(Exception e) {
+
+                    }
                 }
             });
         }
     }
 
-    // method to add data to mobile service table
-    public void saveData(String Token) {
-
-        // Create a new data item from the text input
-        final ToDoItem item = new ToDoItem();
-        item.authToken = Token;
-
-        // This is an async task to call the mobile service and insert the data
-        new AsyncTask<Void, Void, Void>() {
-            @Override
-            protected Void doInBackground(Void... params) {
-                try {
-                    //
-                    final ToDoItem entity = mToDoTable.insert(item).get();  //addItemInTable(item);
-
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-
-                            // code inserted here can update UI elements, if required
-                        }
-                    });
-                } catch (Exception exception) {
-
-                }
-                return null;
-            }
-        }.execute();
-    }
-
-    private void createAndShowDialog(String message, String title) {
+    public void createAndShowDialog(String message, String title) {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setMessage(message);
         builder.setTitle(title);
         builder.create().show();
     }
 
-    // method to add data to mobile service table
-    public void addData(View view) {
-
-        // create reference to TextView input widgets
-        // TextView data1 = (TextView) findViewById(R.id.insertText1);
-        // the below textview widget isn't used (yet!)
-        //TextView data2 = (TextView) findViewById(R.id.insertText2);
-
-        // Create a new data item from the text input
-        //final ToDoItem item = new ToDoItem();
-        // item.text = data1.getText().toString();
-
-        // This is an async task to call the mobile service and insert the data
-        new AsyncTask<Void, Void, Void>() {
-            @Override
-            protected Void doInBackground(Void... params) {
-                try {
-                    //
-                    //  final ToDoItem entity = mToDoTable.insert(item).get();  //addItemInTable(item);
-
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-
-                            // code inserted here can update UI elements, if required
-
-                        }
-                    });
-                } catch (Exception exception) {
-
-                }
-                return null;
-            }
-        }.execute();
-    }
-
-    // method to view data from mobile service table
-    public void viewData(View view) {
-
-        display.setText("Loading...");
-
-        new AsyncTask<Void, Void, Void>() {
-            @Override
-            protected Void doInBackground(Void... params) {
-                try {
-                    final List<ToDoItem> result = mToDoTable.select("id", "text").execute().get();
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            // get all data from column 'text' only add add to the stringbuilder
-                            for (ToDoItem item : result) {
-                                sb.append(item.text + " ");
-                            }
-
-                            // display stringbuilder text using scrolling method
-                            display.setText(sb.toString());
-                            display.setMovementMethod(new ScrollingMovementMethod());
-                            sb.setLength(0);
-                        }
-                    });
-                } catch (Exception exception) {
-                }
-                return null;
-            }
-        }.execute();
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        int id = item.getItemId();
-        if (id == R.id.action_settings) {
-            return true;
-        }
-
-        return super.onOptionsItemSelected(item);
-    }
-
-    // class used to work with ToDoItem table in mobile service, this needs to be edited if you wish to use with another table
-    public class ToDoItem {
-        private String id;
-        private String text;
-        private String authToken;
-        private String firstName;
-        private String lastname;
-        private Date dateAuthenticated;
-        private String appID;
-        private static final String TAG = "MyActivity";
-    }
-
     public class getAuthToken extends AsyncTask<String, String, String> {
-
-        ArrayList<String> items = new ArrayList<String>();
-
         private static final String API = "https://mobcompjake.azurewebsites.net/.auth/me";
-
-        private static final String API_RESULT = "";
-
-        String yourServiceUrl = (API);
 
         @Override
         protected void onPreExecute() {
@@ -343,8 +202,7 @@ public class MainActivity extends Activity {
 
         //List View is created and parsed JSON data form web service is appended to a new item of the list
         @Override
-        protected void onPostExecute(String strFromDoInBg)
-        {
+        protected void onPostExecute(String strFromDoInBg) {
             hasAuthenticated = true;
             TextView t = (TextView) findViewById(R.id.textView);
             String authmsg = "Status: Authenticated";
@@ -354,9 +212,10 @@ public class MainActivity extends Activity {
 
     public class getFBWithToken extends AsyncTask<String, String, String> {
 
-        private final String FB_API = ("https://graph.facebook.com/me?fields=name,gender,picture&access_token=" + accessToken);
+        private final String FB_API = ("https://graph.facebook.com/me?fields=name,gender,picture,id&access_token=" + accessToken);
         JSONObject FBJSON = new JSONObject();
         String yourServiceUrl = (FB_API);
+
         @Override
         protected void onPreExecute() {
         }
@@ -381,26 +240,26 @@ public class MainActivity extends Activity {
                 String[] results = new String[3];
                 results[0] = FBJSON.getString("name");
                 results[1] = FBJSON.getString("gender");
-                results[2] = FBJSON.getString("picture");
+                results[2] = FBJSON.getString("id");
+                String id = FBJSON.getString("id");
+                new DownloadImageTask((ImageView) findViewById(R.id.imageView)).execute("https://graph.facebook.com/"+id+"/picture?type=large");
                 ArrayList<String> items = new ArrayList<String>(Arrays.asList(results));
                 ListView list = (ListView) findViewById(R.id.dataView);
                 ArrayAdapter<String> facebookAdapter = new ArrayAdapter<String>(MainActivity.this, android.R.layout.simple_expandable_list_item_1, items);
                 list.setAdapter(facebookAdapter);
                 pressed = false;
-            }catch (Exception e)
-            {
+            } catch (Exception e) {
 
             }
         }
     }
 
-    public class getAzure
-    {
+    public class getAzure {
         final String TAG = "JsonParser.java";
         String json = "";
 
-        public String getTokenFromAzure(Context context, String url, String Auth_Token){
-            try{
+        public String getTokenFromAzure(Context context, String url, String Auth_Token) {
+            try {
                 URL u = new URL(url);
 
                 HttpURLConnection restConnection = (HttpURLConnection) u.openConnection();
@@ -434,7 +293,7 @@ public class MainActivity extends Activity {
                         br.close();
                         //JSON returned as a JSONObject
                         try {
-                            json  = sb.toString();
+                            json = sb.toString();
                             json = json.substring(json.indexOf(":") + 1);
                             json = json.substring(0, json.indexOf(","));
                             json = json.replace("\"", "");
@@ -455,14 +314,14 @@ public class MainActivity extends Activity {
             return json = "";
         }
     }
-    public class getFacebook
-    {
+
+    public class getFacebook {
         final String TAG = "JsonParser.java";
         String json = "";
         JSONObject dataFb = new JSONObject();
 
-        public JSONObject getJSONFromUrl(Context context, String url, String Auth_Token){
-            try{
+        public JSONObject getJSONFromUrl(Context context, String url, String Auth_Token) {
+            try {
                 URL u = new URL(url);
 
                 HttpURLConnection restConnection = (HttpURLConnection) u.openConnection();
@@ -484,11 +343,9 @@ public class MainActivity extends Activity {
                     case 201:
                         // live connection to  REST service is established here using getInputStream() method
                         BufferedReader br = new BufferedReader(new InputStreamReader(restConnection.getInputStream()));
-
                         // create a new string builder to store json data returned from the REST service
                         StringBuilder sb = new StringBuilder();
                         String line = "";
-
                         // loop through returned data line by line and append to stringbuffer 'sb' variable
                         while ((line = br.readLine()) != null) {
                             sb.append(line + "\n");
@@ -513,5 +370,43 @@ public class MainActivity extends Activity {
             }
             return dataFb;
         }
+    }
+
+    private class DownloadImageTask extends AsyncTask<String, Void, Bitmap> {
+        ImageView bmImage;
+
+        public DownloadImageTask(ImageView bmImage) {
+            this.bmImage = bmImage;
+        }
+
+        protected Bitmap doInBackground(String... urls) {
+            String urldisplay = urls[0];
+            Bitmap mIcon11 = null;
+            try {
+                InputStream in = new java.net.URL(urldisplay).openStream();
+                mIcon11 = BitmapFactory.decodeStream(in);
+            } catch (Exception e) {
+                Log.e("Error", e.getMessage());
+                e.printStackTrace();
+            }
+            return mIcon11;
+        }
+
+        protected void onPostExecute(Bitmap result) {
+            bmImage.setImageBitmap(result);
+        }
+    }
+
+    public boolean isConnectedToInternet() {
+        ConnectivityManager internetConn = (ConnectivityManager) getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (internetConn != null) {
+            NetworkInfo[] info = internetConn.getAllNetworkInfo();
+            if (info != null) //If there is a connection present
+                for (int i = 0; i < info.length; i++)
+                    if (info[i].getState() == NetworkInfo.State.CONNECTED) {
+                        return true; //return the state of the connection
+                    }
+        }
+        return false; //otherwise, return nothing
     }
 }
