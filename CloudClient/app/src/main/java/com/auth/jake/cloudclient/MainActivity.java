@@ -161,27 +161,27 @@ public class MainActivity extends Activity {
     }
 
     private void cacheUserToken(MobileServiceUser user) throws Exception {
-        SharedPreferences prefs = getSharedPreferences(Cache, Context.MODE_PRIVATE);
-        Editor editor = prefs.edit();
+        SharedPreferences preferences = getSharedPreferences(Cache, Context.MODE_PRIVATE);
+        Editor editor = preferences.edit();
         editor.putString(uidCache, user.getUserId());
         editor.putString(tknCache, SecurityClass.encrypt(user.getAuthenticationToken(), key));
         editor.apply();
-    } //sound
+    }
 
     private boolean loadUserTokenCache(MobileServiceClient client) throws Exception {
         SharedPreferences preferences = getSharedPreferences(Cache, Context.MODE_PRIVATE);
-        String userId = preferences.getString(uidCache, "undefined");
-        if (userId == "undefined")
+        String uid = preferences.getString(uidCache, "undefined");
+        if (uid.equals("undefined"))
             return false;
-        String token = preferences.getString(tknCache, "undefined");
-        if (token == "undefined")
+        String tkn = preferences.getString(tknCache, "undefined");
+        if (tkn.equals("undefined"))
             return false;
-        MobileServiceUser user = new MobileServiceUser(userId);
-        user.setAuthenticationToken(token);
-        authToken = SecurityClass.decrypt(user.getAuthenticationToken(), key);
+        MobileServiceUser user = new MobileServiceUser(uid);
         client.setCurrentUser(user);
+        user.setAuthenticationToken(tkn);
+        authToken = SecurityClass.decrypt(user.getAuthenticationToken(), key);
         return true;
-    } //sound
+    }
 
     public void instanceADBuilder(String message, String title) {
         //functions to build and show an alert dialog from
@@ -208,8 +208,8 @@ public class MainActivity extends Activity {
 
             try {
                 String accessResult;
-                getAzure jParser = new getAzure();
-                accessResult = jParser.getTokenFromAzure(MainActivity.this, API, authToken);
+                getAzure get = new getAzure();
+                accessResult = get.getTokenFromAzure(MainActivity.this, API, authToken);
                 accessToken = accessResult;
             } catch (Exception e) {
                 e.printStackTrace();
@@ -244,8 +244,8 @@ public class MainActivity extends Activity {
         // this method is used for...................
         protected String doInBackground(String... arg0) {
             try {
-                getFacebook jParser = new getFacebook();
-                FBJSON = jParser.getJSONFromUrl(MainActivity.this, yourServiceUrl, authToken);
+                getFacebook get = new getFacebook();
+                FBJSON = get.getJSONFromUrl(MainActivity.this, yourServiceUrl, authToken);
             } catch (Exception e) {
                 e.printStackTrace();
                 Log.e("ERROR", e.toString());
